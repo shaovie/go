@@ -2,143 +2,108 @@ package db
 
 import (
 	"database/sql"
+	"fmt"
+	"os"
 
 	_ "github.com/go-sql-driver/mysql"
+	"ilog"
 )
 
-type DBConn struct {
-    db     *DB
-}
+var gDB *sql.DB
 
-func NewDB(host, port, user, passwd, charset, name string) (*DBConn, error) {
-    db, err := sql.Open("mysql",
-        fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=%s&", user, passwd, host, port, name, charset))
+func Init(host, port, user, passwd, charset, dbName string) (err error) {
+	gDB, err = sql.Open("mysql",
+		fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=%s&", user, passwd, host, port, dbName, charset))
 	if err != nil {
-		return fmt.Errorf("mysql - open fail[%s]", err.Error())
+		return err
 	}
-    return &DBConn {
-        db: db,
-    }
+	return nil
 }
 
-func (c *DBConn) RawQuery(sql string) (map[{}interface]{}interface, error) {
-    rows, err := c.db.Query(sql)
-    if err != nil {
-        return nil, fmt.Errorf("mysql - query error [%s]", err.Error())
-    }
-
-    defer rows.Close()
-
-func handleResult()
-    // Get column names
-    columns, err := rows.Columns()
-    if err != nil {
-        return nil, fmt.Errorf("mysql - columns error [%s]", err.Error())
-    }
-
-    // Make a slice for the values
-    values := make([]sql.RawBytes, len(columns))
-
-    // rows.Scan wants '[]interface{}' as an argument, so we must copy the
-    // references into such a slice
-    // See http://code.google.com/p/go-wiki/wiki/InterfaceSlice for details
-    scanArgs := make([]interface{}, len(values))
-    for i := range values {
-        scanArgs[i] = &values[i]
-    }
-
-    // Fetch rows
-    for rows.Next() {
-        // get RawBytes from data
-        err = rows.Scan(scanArgs...)
-        if err != nil {
-            ilog.Error("mysql - " + err.Error())
-            rows.Close()
-            return err
-        }
-        record := make(map[string]string)
-        for i, col := range values {
-            if col != nil {
-                record[columns[i]] = string(col)
-            }
-        }
-    }
-    if err = rows.Err(); err != nil {
-        ilog.Error("mysql - " + err.Error())
-        rows.Close()
-        return err
-    }
-    rows.Close()
+func Close() {
+	if gDB != nil {
+		gDB.Close()
+	}
 }
+func RawQuery(querySql string) (map[int]map[string]string, error) {
+	rows, err := gDB.Query(querySql)
+	if err != nil {
+		return nil, err
+	}
+
+	defer rows.Close()
+
+	// Get column names
+	columns, err := rows.Columns()
+	if err != nil {
+		return nil, err
+	}
+
+	// Make a slice for the values
+	values := make([]sql.RawBytes, len(columns))
+
+	// rows.Scan wants '[]interface{}' as an argument, so we must copy the
+	// references into such a slice
+	// See http://code.google.com/p/go-wiki/wiki/InterfaceSlice for details
+	scanArgs := make([]interface{}, len(values))
+	for i := range values {
+		scanArgs[i] = &values[i]
+	}
+
+	// Fetch rows
+	record := make(map[int]map[string]string)
+	i := 0
+	for rows.Next() {
+		// get RawBytes from data
+		err = rows.Scan(scanArgs...)
+		if err != nil {
+			return nil, err
+		}
+		row := make(map[string]string)
+		for j, v := range values {
+			if v != nil {
+				row[columns[j]] = string(v)
+			}
+		}
+		if len(row) > 0 {
+			record[i] = row
+			i++
+		}
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return record, nil
 }
+
 func mysqlTest(ch chan<- int) error {
 	f := func() {
 		ch <- 1
 	}
 	defer f()
-
-	db, err := sql.Open("mysql", "root:taojinzi@tcp(127.0.0.1:3306)/wemall?charset=utf8")
+	err := Init("127.0.0.1", "3306", "root", "taojinzi", "utf8", "wemall")
 	if err != nil {
 		ilog.Error("mysql - " + err.Error())
 		return err
 	}
+	//defer Close()
+
+	n := 0
 	for i := 0; i < 100000; i++ {
-		rows, err := db.Query("select * from ws_group_buy")
+		rows, err := RawQuery("select * from ws_group_buy")
 		if err != nil {
 			ilog.Error("mysql - " + err.Error())
 			return err
 		}
-
-		// Get column names
-		columns, err := rows.Columns()
-		if err != nil {
-			ilog.Error("mysql - " + err.Error())
-            rows.Close()
-			return err
-		}
-
-		// Make a slice for the values
-		values := make([]sql.RawBytes, len(columns))
-
-		// rows.Scan wants '[]interface{}' as an argument, so we must copy the
-		// references into such a slice
-		// See http://code.google.com/p/go-wiki/wiki/InterfaceSlice for details
-		scanArgs := make([]interface{}, len(values))
-		for i := range values {
-			scanArgs[i] = &values[i]
-		}
-
-		// Fetch rows
-		for rows.Next() {
-			// get RawBytes from data
-			err = rows.Scan(scanArgs...)
-			if err != nil {
-				ilog.Error("mysql - " + err.Error())
-                rows.Close()
-				return err
-			}
-			record := make(map[string]string)
-			for i, col := range values {
-				if col != nil {
-					record[columns[i]] = string(col)
-				}
-			}
-		}
-		if err = rows.Err(); err != nil {
-			ilog.Error("mysql - " + err.Error())
-            rows.Close()
-			return err
-		}
-        rows.Close()
+		n += len(rows)
+		//ilog.Rinfo("count = %d content=%s", len(rows), rows[0]["content"])
 	}
-	ilog.Rinfo("count = " + strconv.Itoa(count))
+	ilog.Rinfo("count = %d", n)
 
-	defer db.Close()
 	return nil
 }
 
-
-func doMysqlTest() {
+func TestMyQuery() {
 	closeCh := make(chan int)
 	for i := 0; i < 3; i++ {
 		go mysqlTest(closeCh)

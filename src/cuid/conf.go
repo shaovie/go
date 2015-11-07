@@ -1,16 +1,22 @@
 package main
 
+import (
+	"encoding/json"
+	"errors"
+	"io/ioutil"
+)
+
 type serverConfig struct {
 	LogFile string
 	PidFile string
-    DB struct {
-        Host    string
-        Port    string
-        User    string
-        Passwd  string
-        Charset string
-        Name    string
-    }
+	DB      struct {
+		Host    string
+		Port    string
+		User    string
+		Passwd  string
+		Charset string
+		Name    string
+	}
 }
 
 var ServerConfig serverConfig

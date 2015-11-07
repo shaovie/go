@@ -12,8 +12,8 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/garyburd/redigo/redis"
 	"db"
+	"github.com/garyburd/redigo/redis"
 	"ilog"
 	"prof"
 )
@@ -133,10 +133,10 @@ func main() {
 	}
 
 	ilog.Rinfo("launch ok")
-	runtime.GOMAXPROCS(runtime.NumCPU())
+	runtime.GOMAXPROCS(runtime.NumCPU() * 2)
 
 	//doRedisTest()
-	doMysqlTest()
+	db.TestMyQuery()
 
 	index := func(w http.ResponseWriter, r *http.Request) {
 		ret, err := redisConn.Do("PING")
