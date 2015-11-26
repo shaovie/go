@@ -2,17 +2,11 @@ package main
 
 import (
 	"flag"
-	"fmt"
-	"io"
-	"net/http"
 	"os"
 	"os/signal"
 	"runtime"
-	"strconv"
 	"syscall"
-	"time"
 
-	"db"
 	"github.com/garyburd/redigo/redis"
 	"ilog"
 	"prof"
@@ -59,40 +53,11 @@ func signalHandle() {
 	for {
 		sig := <-ch
 		if sig == syscall.SIGHUP {
-			ilog.Rinfo("signal hup")
+			ilog.Rinfo("signal - receive hup")
 		} else if sig == syscall.SIGINT {
-			ilog.Rinfo("signal int")
+			ilog.Rinfo("signal - receive int")
 		}
 	}
-}
-
-func redisTest(ch chan<- int, key string) {
-	redisConn, err := redis.DialTimeout("tcp", "172.18.8.24:6001", 1*time.Second, 1*time.Second, 1*time.Second)
-	if err != nil {
-		ilog.Error("redis - " + err.Error())
-		os.Exit(0)
-	}
-	redisConn.Do("DEL", "hello"+key)
-	for i := 0; i < 1000000; i++ {
-		_, err := redisConn.Do("INCR", "hello"+key)
-		if err != nil {
-			ilog.Error("redis - " + err.Error())
-		}
-	}
-	ret, err := redisConn.Do("GET", "hello"+key)
-	ilog.Rinfo("redis - " + fmt.Sprintf("%s", ret))
-	ch <- 1
-}
-
-func doRedisTest() {
-	closeCh := make(chan int)
-	for i := 0; i < 3; i++ {
-		go redisTest(closeCh, strconv.Itoa(i))
-	}
-	for i := 0; i < 3; i++ {
-		<-closeCh
-	}
-	os.Exit(0)
 }
 
 func main() {
@@ -104,16 +69,18 @@ func main() {
 	}
 
 	if err := loadConfig(); err != nil {
-		println("config -", err.Error())
+		println("config - ", err.Error())
 		os.Exit(0)
 	}
 
 	if toDaemon {
 		if err := daemon(); err != nil {
-			println("daemon -", err.Error())
+			println("daemon - ", err.Error())
 			os.Exit(0)
 		}
 	}
+
+	runtime.GOMAXPROCS(runtime.NumCPU() * 2)
 
 	go signalHandle()
 
@@ -122,61 +89,21 @@ func main() {
 	}
 
 	if err := initSvc(); err != nil {
-		println("init -", err.Error())
+		println("init - ", err.Error())
 		os.Exit(1)
 	}
 
-	// output pid
 	if err := outputPid(ServerConfig.PidFile); err != nil {
 		ilog.Error("pid - " + err.Error())
 		os.Exit(0)
 	}
 
 	ilog.Rinfo("launch ok")
-	runtime.GOMAXPROCS(runtime.NumCPU() * 2)
 
-	//doRedisTest()
-	db.TestMyQuery()
-
-	index := func(w http.ResponseWriter, r *http.Request) {
-		ret, err := redisConn.Do("PING")
-		if err != nil {
-			ilog.Error("redis - " + err.Error())
-		} else {
-			io.WriteString(w, fmt.Sprintf("%s", ret))
-		}
+	err := startServer()
+	if err != nil {
+		println("start - ", err.Error())
 	}
-	http.HandleFunc("/", index)
-	http.ListenAndServe(":8081", nil)
-
-	/*
-		listener, err := net.Listen("tcp", "0.0.0.0:8088")
-		if err != nil {
-			ilog.Error("listen fail " + err.Error())
-			os.Exit(0)
-		}
-		defer listener.Close()
-
-		for {
-			conn, err := listener.Accept()
-			if err != nil {
-				ilog.Error("accept error " + err.Error())
-				break
-			}
-			go func(conn net.Conn) {
-				for {
-					buf := make([]byte, 1024)
-					_, err := conn.Read(buf)
-					if err != nil {
-						conn.Close()
-						return
-					}
-
-					_, err = conn.Write([]byte("HTTP/1.1 200 OK\r\nConnection: keep-alive\r\nContent-Length: 5\r\n\r\nhello"))
-				}
-			}(conn)
-		}
-	*/
 
 	os.Exit(1)
 }

@@ -9,7 +9,18 @@ import (
 type serverConfig struct {
 	LogFile string
 	PidFile string
-	DB      struct {
+
+	MC struct {
+		Host string
+		Port string
+	}
+
+	Nosql struct {
+		Host string
+		Port string
+	}
+
+	DB struct {
 		Host    string
 		Port    string
 		User    string

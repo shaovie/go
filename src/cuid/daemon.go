@@ -29,7 +29,7 @@ func outputPid(pidPath string) error {
 	// Luanch only one instance.
 	if err := syscall.Flock(int(pidFile.Fd()), syscall.LOCK_EX|syscall.LOCK_NB); err != nil {
 		pidFile.Close()
-		return err
+		return errors.New("flock fail: " + err.Error())
 	}
 	pidFile.Truncate(0)
 	pidFile.Write([]byte(strconv.Itoa(os.Getpid())))
